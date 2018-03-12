@@ -7,6 +7,27 @@ from sys import argv
 # logging module to log events to file
 import logging
 import logging.config
+import threading
+import string
+import random
+
+# command codenames between sever and client
+commands = {
+    'move': 'm',
+    'quit': 'q',
+    'echo': 'e',
+    'confirm': 'c',
+    'confirm_states': {
+        'id received': '1',
+        'role received': '2',
+        'match received': '3' 
+    },
+    'lost': 'l',
+    'win': 'w',
+    'draw': 'd',
+    'your_turn': 'u',
+    'other_turn': 'o'
+}
 
 # setup logging file and format of log statement
 logging.config.fileConfig('logging.conf')
@@ -22,16 +43,14 @@ class Server:
     
     def bind_server(self, host, port):
         """bind and listen to the the given port."""
-        
-        self.port = port
 
         while True:
             # try to bind
             try:
-                self.server_socket.bind((host, int(self.port)))
-                logger.info('Bind successful to port ' + str(self.port))
+                self.server_socket.bind((host, int(port)))
+                logger.info('Bind successful to port ' + str(port))
                 self.server_socket.listen(5)
-                logger.info('Listening on port ' + str(self.port))
+                logger.info('Listening on port ' + str(port))
                 break
 
             except socket.error as e:
@@ -43,8 +62,8 @@ class Server:
                 
                 # assign new port or exit
                 if(option.lower()) == 'n':
-                    self.port = input('Enter new port number: ')
-                    logger.info('New port specified: ' + str(self.port))
+                    port = input('Enter new port number: ')
+                    logger.info('New port specified: ' + str(port))
                     print('\n')
                 elif(option.lower()) == 'q':
                     logger.info('Exit the program!')
@@ -53,13 +72,6 @@ class Server:
                     logger.error('Bad choice, exit!')
                     exit(-1)
 
-
-    def show_connection(self):
-        """show connected clients."""
-        # get connection instance
-        self.conn, self.addr = self.server_socket.accept()
-        logger.info('Connected to: ' + str(self.addr[0]) + ':' + str(self.addr[1]))
-
     def close(self):
         logger.info('Closing socket')
         self.server_socket.close()
@@ -67,11 +79,134 @@ class Server:
 class GameServer(Server):
     """Handle game start and clients management."""
 
-    def __init__(self):
+    players_waitlist = []
+    active_players = [] # TODO: add logic to this
+    players_count_history = 0
+
+    def __init__(self, host, port):
         """Get the socket connection object from Server class."""
         Server.__init__(self)
-    
-    # TODO: add clients connection logic, and players matching and game itself
+        # bind to port number as integer
+        self.bind_server(host, int(port))
+
+    def start(self):
+        """Start the game server."""
+        # variable to keep track of connected clients
+        self.__receive_connections()
+
+    def __receive_connections(self):
+        """show connected clients."""
+        # get connection instances
+        while True:
+            conn, addr = self.server_socket.accept()
+            logger.info('Connected to: ' + str(addr[0]) + ':' + str(addr[1]))
+            try:
+                new_player = Player(conn)
+                cThread = threading.Thread(target=self.__client_handler, args=(new_player,))
+                cThread.daemon = True             
+                cThread.start()
+                self.players_waitlist.append (new_player)
+                logger.info('Total connected clients number is: ' + str(GameServer.players_count_history))
+            except Exception as e:
+                logger.error("Couldn't create a thread, terminating client session. Exception details: " + str(e))
+                # close the current connection
+                new_player.conn.send('e', 'Server error, terminating session')
+                conn.close()
+
+    def drop_player(self, player):
+        """Disconnect a player or end connection with it"""
+        logger.warning('Dropping player id: ' + str(player.id))
+        player.second('Server ended your session.')
+        player.conn.close()
+
+    def __client_handler(self, player):
+        """Thread to handle client connection."""
+        # TODO: add clients connection logic, and players matching and game itself
+        while True:
+            received = player.receive(2, 'move')
+            if(received != None):
+                player.send('move', '2')
+            # if(player.check_connection()):
+            #     break
+
+    def find_opponent(self, player):
+        """find an opponenet for the player"""
+        # TODO: implement this
+
+class PlayerPair:
+    """class to arrage pairs of matched players"""
+
+    def __init__(self, player1, player2):
+        """init function for PlayerPair."""
+        self.player1 = player1
+        self.player2 = player2
+
+class Player:
+    """Player class to keep track of availble players and their status"""
+    # count of players connected since the server started
+
+    def __init__(self, conn):
+        """called when new player created."""
+        # update players count
+        GameServer.players_count_history += 1
+        self.conn = conn
+        self.is_waiting = True
+        self.id = self.__id_generator()
+        logger.info('player with id: ' + str(self.id) + ' has joined.')
+
+    def send(self, command, msg):
+        """Send data from server to player"""
+        try:
+            # TODO: add encryption
+            self.conn.send((commands[command] + msg).encode())
+            logger.info('sending: ' + str(command) + ' to: ' + str(self.id))
+        except:
+			# assume player is lost if an error accured
+            self.__lost_connection()
+
+    def receive(self, size, expected_command):
+        """Receive data from player and check the validity of the data."""
+        try:
+            msg = self.conn.recv(size).decode()
+            logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
+            # TODO: add decryption
+			# If received a quit signal from the client, print msg
+            if(len(msg) > 0):
+                if(msg[0] == commands['quit']):
+                    logging.info(msg[1:])
+                    self.__lost_connection()
+                # If the message is not the expected type
+                elif(msg[0] != commands[expected_command]):
+                    # Connection lost
+                    self.__lost_connection()
+                # If received an integer from the client
+                elif(msg[0] == commands['move']):
+                    # Return the integer
+                    return int(msg[1:])
+                else:
+                    return msg
+        except Exception as e:
+			# assume player connection is lost if received nothing
+            logger.error('Got exception while receiving msg: ' + str(e))
+            self.__lost_connection()
+        return None
+
+    def check_connection(self):
+        """check if the player's connection is still alive, return true or false"""
+        self.send(commands['echo'], 'f')
+        if(self.receive(2, "e") == "f"):
+            return True
+        return False
+
+    def __lost_connection(self):
+        """Called when connection with player is lost"""
+        logger.warning('Player: ' + str(self.id) + ' has lost connection!')
+        # inform second player that his opponent has left the game
+        # TODO: self.conn.send()
+
+    def __id_generator(self, size = 4, chars = string.ascii_lowercase + string.digits):
+        """Generate random id strings for the players, just for a unique id"""
+        return ''.join(random.choice(chars) for _ in range(size))
 
 
 def main():
@@ -84,11 +219,8 @@ def main():
         port = input('Enter the port number: ')
 
     try:
-        server = GameServer()
-        # bind to port number as integer
-        server.bind_server('', int(port))
-        # show connected clients
-        server.show_connection()
+        # start game server
+        server = GameServer('', port).start()
         # close the socket connection before terminating the server
         server.close()
 
