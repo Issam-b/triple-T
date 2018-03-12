@@ -6,6 +6,11 @@ import socket
 from sys import argv
 # logging module to log events to file
 import logging
+import logging.config
+
+# setup logging file and format of log statement
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('server')
 
 class Server:
     """Server class to handle connection related calls."""
@@ -23,15 +28,15 @@ class Server:
         while True:
             # try to bind
             try:
-                self.server_socket.bind((host, self.port))
-                print_with_log("Bind successful to port " + str(self.port), 'info')
+                self.server_socket.bind((host, int(self.port)))
+                logger.info('Bind successful to port ' + str(self.port))
                 self.server_socket.listen(5)
-                print_with_log("Listening on port " + str(self.port), 'info')
+                logger.info('Listening on port ' + str(self.port))
                 break
 
             except socket.error as e:
                 # print errors
-                print_with_log(str(e), 'error')
+                logger.error(str(e))
                 
                 # show menu
                 option = input('Choose an option:\n[N]ew port | [Q]uit : ')
@@ -39,13 +44,13 @@ class Server:
                 # assign new port or exit
                 if(option.lower()) == 'n':
                     self.port = input('Enter new port number: ')
-                    print_with_log("New port specified: " + str(self.port), 'info')
+                    logger.info('New port specified: ' + str(self.port))
                     print('\n')
                 elif(option.lower()) == 'q':
-                    print_with_log("Exit the program!", 'info')
+                    logger.info('Exit the program!')
                     exit(0)
                 else:
-                    print_with_log("Bad choice, exit!", 'error')
+                    logger.error('Bad choice, exit!')
                     exit(-1)
 
 
@@ -53,10 +58,10 @@ class Server:
         """show connected clients."""
         # get connection instance
         self.conn, self.addr = self.server_socket.accept()
-        print('Connected to: ' + str(self.addr[0]) + ':' + str(self.addr[1]))
+        logger.info('Connected to: ' + str(self.addr[0]) + ':' + str(self.addr[1]))
 
     def close(self):
-        # TODO: add log
+        logger.info('Closing socket')
         self.server_socket.close()
             
 class GameServer(Server):
@@ -69,22 +74,7 @@ class GameServer(Server):
     # TODO: add clients connection logic, and players matching and game itself
 
 
-def print_with_log(message, log_type):
-    """Helper function to print and log events at the same time"""
-    print(message)
-    if(log_type == 'info'):
-        logging.info(message)
-    elif(log_type == 'error'):
-        logging.error(message)
-    elif(log_type == 'debug'):
-        logging.debug(message)
-
-
 def main():
-    # setup logging file and format of log statement
-    logging.basicConfig(filename="server.log", level=logging.INFO, 
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
     # If there are more than 2 arguments 
     if(len(argv) >= 2):
         # Set port number to argument 1
@@ -102,11 +92,11 @@ def main():
         # close the socket connection before terminating the server
         server.close()
 
-        print_with_log("Exiting", 'info')
+        logger.info('Exiting')
         exit(-1)
 
     except Exception as e:
-        print_with_log(str(e), 'error')
+        logger.error(str(e))
 
     
 if __name__ == __name__:
