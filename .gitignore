@@ -104,8 +104,4 @@ ENV/
 .idea/
 
 # visual studio code
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.vscode/
