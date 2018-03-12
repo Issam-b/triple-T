@@ -1,26 +1,40 @@
-#! /usr/bin/python3
+# Import the socket module
+import socket
+# Import command line arguments
+from sys import argv
 
-import socket 
-from sys import argv 
+# If there are more than 3 arguments
+if len(argv) >= 3:
+    # Set the address to argument 1, and port number to argument 2
+    address = argv[1]
+    port_number = argv[2]
+else:
+    # Ask the user to input the address and port number
+    address = input("Please enter the address:")
+    port_number = input("Please enter the port:")
 
-class Client:
+# Create the socket object
+# 1st parameter: IPv4 networking
+# 2nd parameter: socket type, SOCK_STREAM = TCP
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-  def __init__(self):
-    ''' Initializtion for client '''
-    self.client_socket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+# Connecting to Server
+while True:
+    try:
+        print("Trying to Connect Server...")
+        # Connect to host address, port
+        client_socket.connect((address, int(port_number)))
+        # Error, break loop
+        break
 
-  def connect(self, address, port_number):
-    ''' tries to connect and returns True when connection occurs '''
-    while True:
-      try:
-        print("Connecting to the game server")
-        self.client_socket.timeout(10)
-        self.client_socket.connect((address,int(port_number)))
-        return True
-      except:
-        print("Received an error while attempting to connect to " + str(address) + " from port number " + int(port_number))
-        self.__connect_failed__()
-    return False
+    except:
+        # Caught an error
+        print("Error in Connecting!")
 
-  def __connect_failed__(self):
-    pass
+# Print Welcome Message from Server
+print(client_socket.recv(1024).decode())
+
+# Shut down the socket (prevent more send/rec)
+client_socket.shutdown(socket.SHUT_RDWR)
+# Close Socket
+client_socket.close()
