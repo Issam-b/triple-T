@@ -124,9 +124,9 @@ class GameServer(Server):
         # TODO: add clients connection logic, and players matching and game itself
         while True:
             received = player.receive(2, 'move')
-            if(received != None):
-                player.send('move', '2')
-            # if(player.check_connection()):
+            # if received is not None:
+            #     player.send('move', '2')
+            # if player.check_connection():
             #     break
 
     def find_opponent(self, player):
@@ -168,10 +168,11 @@ class Player:
         """Receive data from player and check the validity of the data."""
         try:
             msg = self.conn.recv(size).decode()
-            logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
             # TODO: add decryption
 			# If received a quit signal from the client, print msg
-            if(len(msg) > 0):
+            # TODO: ignore any command that is unknown
+            if(len(msg) > 0 ):
+                logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
                 if(msg[0] == commands['quit']):
                     logging.info(msg[1:])
                     self.__lost_connection()
