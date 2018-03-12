@@ -31,8 +31,13 @@ while True:
         # Caught an error
         print("Error in Connecting!")
 
-# Print Welcome Message from Server
+# Print Welcome msg from Server
 print(client_socket.recv(1024).decode())
+
+while True:
+
+    # Receive/store msg from server
+    data_in = client_socket.recv(1024)
 
 # Shut down the socket (prevent more send/rec)
 client_socket.shutdown(socket.SHUT_RDWR)
