@@ -26,6 +26,38 @@ else:
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 
+# Connection lost
+def connection_lost():
+    print("Error: connection_lost")
+    try:
+        # Inform Server, send "q"
+        client_socket.send("q".encode())
+    except:
+        raise
+
+
+# Receive msg
+def client_receive(size, expected_command):
+    try:
+        msg = client_socket.recv(size).decode()
+
+        if msg[0] == "q":
+            print(msg[1:])
+            connection_lost()
+        # If the message is not the expected type
+        elif msg[0] != expected_command:
+            connection_lost()
+        # If received an integer from the client
+        elif msg[0] == "m":
+            return int(msg[1:])
+        else:
+            return msg[1:]
+        return msg
+    except:
+        raise
+    return None
+
+
 # Send Msg
 # cmd = command convention, msg = sent msg
 def client_send(cmd, msg):
@@ -44,6 +76,7 @@ while True:
         # Connect to host address, port
         client_socket.connect((address, int(port_number)))
         print("Connected to Server")
+        # Send m test
         client_send('m', "1")
         # Error, break loop
         break
@@ -56,8 +89,7 @@ while True:
 print(client_socket.recv(1024).decode())
 
 while True:
-    # Receive/store msg from server
-    data_in = client_socket.recv(1024)
+    print("Game Stuff")
 
 # Shut down the socket (prevent more send/rec)
 client_socket.shutdown(socket.SHUT_RDWR)
