@@ -3,6 +3,13 @@ import socket
 # Import command line arguments
 from sys import argv
 
+# setup logging file and format of log statement
+import logging
+import logging.config
+
+logging.config.fileConfig('logging.conf')
+logger = logging.getLogger('server')
+
 # If there are more than 3 arguments
 if len(argv) >= 3:
     # Set the address to argument 1, and port number to argument 2
@@ -18,24 +25,37 @@ else:
 # 2nd parameter: socket type, SOCK_STREAM = TCP
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+
+# Send Msg
+# cmd = command convention, msg = sent msg
+def client_send(cmd, msg):
+    try:
+        client_socket.send((cmd + msg).encode())
+
+    except Exception as e:
+        print("Error client_send")
+        logger.error(str(e))
+
+
 # Connecting to Server
 while True:
     try:
         print("Trying to Connect Server...")
         # Connect to host address, port
         client_socket.connect((address, int(port_number)))
+        print("Connected to Server")
+        client_send('m', "1")
         # Error, break loop
         break
 
-    except:
-        # Caught an error
-        print("Error in Connecting!")
+    except Exception as e:
+        print("Error Connecting")
+        logger.error(str(e))
 
 # Print Welcome msg from Server
 print(client_socket.recv(1024).decode())
 
 while True:
-
     # Receive/store msg from server
     data_in = client_socket.recv(1024)
 
