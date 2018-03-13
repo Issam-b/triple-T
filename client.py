@@ -8,7 +8,7 @@ import logging
 import logging.config
 
 logging.config.fileConfig('logging.conf')
-logger = logging.getLogger('server')
+logger = logging.getLogger('client')
 
 # If there are more than 3 arguments
 if len(argv) >= 3:
