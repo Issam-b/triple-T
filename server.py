@@ -123,15 +123,30 @@ class GameServer(Server):
         """Thread to handle client connection."""
         # TODO: add clients connection logic, and players matching and game itself
         while True:
+
+            mThread=threading.Thread(target=self.find_opponent, args=(player,))
+            mThread.daemon = True
+            mThread.start()
             received = player.receive(2, 'move')
             # if received is not None:
             #     player.send('move', '2')
             # if player.check_connection():
             #     break
+            #create thread
+            #check if there is more then 2
+            #
 
-    def find_opponent(self, player):
+
+    def find_opponent(self, player1):
         """find an opponenet for the player"""
         # TODO: implement this
+        if len(self.players_waitlist) >= 2:
+            for player2 in self.players_waitlist:
+                player1.match = player2
+                player2.match = player1
+                player1.role= "X"
+                player2.role = "O"
+
 
 class PlayerPair:
     """class to arrage pairs of matched players"""
@@ -153,6 +168,7 @@ class Player:
         self.is_waiting = True
         self.id = self.__id_generator()
         logger.info('player with id: ' + str(self.id) + ' has joined.')
+        self.role = None
 
     def send(self, command, msg):
         """Send data from server to player"""
