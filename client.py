@@ -98,6 +98,11 @@ while True:
   msg = client_receive(2,'g')
   print('player role is: ' + str(msg))
   client_send('c', '1')
+    # Send e test
+  msg = client_receive(2, 'e')
+  print(str(msg[0:1]))
+  if msg[0:1] == 'f':
+    client_send('e', "f")
 
   time.sleep(1)
 

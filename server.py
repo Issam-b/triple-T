@@ -103,7 +103,7 @@ class GameServer(Server):
         # check connection thread
         check_conn_thread = threading.Thread(target=self.check_connection_thread, args=())
         check_conn_thread.daemon = True
-        # check_conn_thread.start()
+        check_conn_thread.start()
 
         # variable to keep track of connected clients
         matchingThread = threading.Thread(target=self.find_opponent, args=())
@@ -139,6 +139,7 @@ class GameServer(Server):
             if counter % 10 == 0:
                 logger.info('Active players: ' + str(len(self.active_players)))
             for player in self.active_players:
+                player.receive_populate_buffer()
                 if player.check_connection() is False:
                     self.drop_player(player)
             time.sleep(1)
@@ -147,6 +148,7 @@ class GameServer(Server):
     def drop_player(self, player):
         """Disconnect a player or end connection with it"""
         logger.warning('Dropping player id: ' + str(player.id))
+        # TODO: if player is in a game, inform the other player
 
         if self in GameServer.players_waitlist:
             GameServer.players_waitlist.remove(player)
@@ -266,6 +268,18 @@ class Player:
         logger.info('player with id: ' + str(self.id) + ' has joined.')
         self.role = ''
         self.opponenet = ''
+        self.cmd_buffer = {
+            'move': '',
+            'quit': '',
+            'echo': '',
+            'confirm': '',
+            'lose': '',
+            'win': '',
+            'draw': '',
+            'your_turn': '',
+            'other_turn': '',
+            'game_info': ''
+        }
 
     def send(self, command, msg):
         """Send data from server to player"""
@@ -277,45 +291,75 @@ class Player:
 			# assume player is lost if an error accured
             self.__lost_connection()
 
-    def receive(self, size, expected_command):
-        """Receive data from player and check the validity of the data."""
+# TODO: add function to handle checking and receiveing
+
+    def receive_populate_buffer(self, size=message_length):
+        """receive commands and save to buffer untill read by server"""
         try:
             msg = self.conn.recv(size).decode()
             # TODO: add decryption
 			# If received a quit signal from the client, print msg
-            # TODO: ignore any command that is unknown
             if len(msg) > 0:
                 logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
-                if msg[0] == commands['quit']:
-                    # logging.info(msg[1:])
-                    logger.warning('Player: ' + str(self.id) + ' asked to quit')
-                    self.conn.close()
-                    GameServer.drop_player(self)
-                    # self.__lost_connection()
-                # If the message is not the expected type
-                elif msg[0] != expected_command:
-                    # Connection lost
-                    # self.__lost_connection()
-                    logger.warning('Received unexpected message')
-                # If received an integer from the client
-                elif msg[0] == commands['move']:
-                    # Return the integer
-                    return int(msg[1:])
-                else:
-                    return msg[1:]
-                return msg
-        except Exception as es:
-			# assume player connection is lost if received nothing
-            logger.error('Got exception while receiving msg: ' + str(es))
-            # self.__lost_connection()
-            # TODO: maybe try to receive again
+                recv_cmd = ''
+                items = commands.items()
+                for key, cmd in items:
+                    if cmd == msg[0]:
+                        recv_cmd = key
+                        break
+                
+                cmd_type_1 = {'quit', 'lose', 'win', 'your_turn', 'other_turn'}
+                cmd_type_2 = {'echo', 'move', 'confirm'}
 
-        return None
+                if recv_cmd in cmd_type_1:
+                    self.cmd_buffer[str(recv_cmd)] = True
+                elif recv_cmd in cmd_type_2:
+                    self.cmd_buffer[str(recv_cmd)] = msg[1:]
+
+        except Exception as es:
+            logger.error('Got exception while receiving msg: ' + str(es))
+
+    def read_buffer(self, expected_command):
+        """Receive data from player and check the validity of the data."""
+        # TODO put each player in a seperate thread
+        # fetch data
+        self.receive_populate_buffer()
+        # read buffer and save value needed
+        cmd_to_return = self.cmd_buffer[str(expected_command)]
+        # clear it after reading it
+        self.cmd_buffer[str(expected_command)] = ''
+
+        return cmd_to_return
+
+        # if msg[0] == commands['quit']:
+        #     # logging.info(msg[1:])
+        #     logger.warning('Player: ' + str(self.id) + ' asked to quit')
+        #     self.conn.close()
+        #     GameServer.drop_player(self)
+        #     # self.__lost_connection()
+        
+        # # echo command
+        # elif msg[0] == commands['echo']:
+        #     return 
+        # # If the message is not the expected type
+        # elif msg[0] != expected_command:
+        #     # Connection lost
+        #     # self.__lost_connection()
+        #     logger.warning('Received unexpected message')
+        # # If received an integer from the client
+        # elif msg[0] == commands['move']:
+        #     # Return the integer
+        #     return int(msg[1:])
+        # else:
+        #     return msg[1:]
+        # return msg
 
     def check_connection(self):
         """check if the player's connection is still alive, return true or false"""
-        self.send(commands['echo'], 'f')
-        if self.receive(2, 'e') == 'f':
+        # challenge = Player.__id_generator(1)
+        challenge = 'f'
+        self.send(commands['echo'], challenge)
+        if self.read_buffer('echo') == challenge:
             return True
         else:
             self.__lost_connection()
@@ -332,7 +376,7 @@ class Player:
             # tries to send for two times
             counter += 1
             logger.info('Sending game info to: ' + str(self.id) + ' for ' + str(counter) + ' time')
-            if int(self.receive(message_length, commands['confirm'])) != int(commands['confirm_states']['game_info_received']):
+            if int(self.read_buffer('confirm')) != int(commands['confirm_states']['game_info_received']):
                 # if counter == 2 and self.check_connection() is False:
                 if counter == 2:
                     # try again to check if player is connected
@@ -356,11 +400,12 @@ class Player:
     def __lost_connection(self):
         """Called when connection with player is lost"""
         logger.warning('Player: ' + str(self.id) + ' has lost connection!')
+        # TODO: delete instance
         # inform second player that his opponent has left the game
         # remove the player from our lists
         # TODO: self.conn.send()
 
-    def __id_generator(self, size = 4, chars = string.ascii_lowercase + string.digits):
+    def __id_generator(self, size=4, chars=string.ascii_lowercase + string.digits):
         """Generate random id strings for the players, just for a unique id"""
         return ''.join(random.choice(chars) for _ in range(size))
 
