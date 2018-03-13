@@ -1,24 +1,18 @@
+#! /usr/bin/python3
+
 # Import the socket module
 import socket
 # Import command line arguments
 from sys import argv
+from configparser import ConfigParser
+import time
 
 # setup logging file and format of log statement
 import logging
 import logging.config
 
-logging.config.fileConfig('logging.conf')
+logging.config.fileConfig('settings.conf')
 logger = logging.getLogger('client')
-
-# If there are more than 3 arguments
-if len(argv) >= 3:
-    # Set the address to argument 1, and port number to argument 2
-    address = argv[1]
-    port_number = argv[2]
-else:
-    # Ask the user to input the address and port number
-    address = input("Please enter the address:")
-    port_number = input("Please enter the port:")
 
 # Create the socket object
 # 1st parameter: IPv4 networking
@@ -29,11 +23,11 @@ client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # Connection lost
 def connection_lost():
     print("Error: connection_lost")
-    try:
-        # Inform Server, send "q"
-        client_socket.send("q".encode())
-    except:
-        raise
+    # try:
+    #     # Inform Server, send "q"
+    #     # client_socket.send("q".encode())
+    # except:
+    #     raise
 
 
 # Receive msg
@@ -62,34 +56,56 @@ def client_receive(size, expected_command):
 # cmd = command convention, msg = sent msg
 def client_send(cmd, msg):
     try:
+        print('sending: ' + str(cmd + msg))
         client_socket.send((cmd + msg).encode())
 
     except Exception as e:
         print("Error client_send")
         logger.error(str(e))
 
+def client_connect():
+  # get configuration
+  config = ConfigParser()
+  config.read('settings.conf')
+  address = config.get('connection', 'address')
+  port = config.get('connection', 'port')
+
+  print("Trying to Connect Server...")
+  # Connect to host address, port
+  client_socket.connect((address, int(port)))
+  print("Connected to Server")
+
+
+while True:
+  try:
+    # connect to server
+    client_connect()
+    break
+
+  except Exception as e:
+    logger.error('Error connectiog, exception message: ' + str(e))
+  finally:
+    time.sleep(1)
 
 # Connecting to Server
 while True:
-    try:
-        print("Trying to Connect Server...")
-        # Connect to host address, port
-        client_socket.connect((address, int(port_number)))
-        print("Connected to Server")
-        # Send m test
-        client_send('m', "1")
-        # Error, break loop
-        break
+  # Send e test
+  # msg = client_receive(2, 'e')
+  # print(str(msg[0:1]))
+  # if msg[0:1] == 'f':
+  #   client_send('e', "f")
+  # wait for match
+  msg = client_receive(2,'g')
+  print('player role is: ' + str(msg))
+  client_send('c', '1')
 
-    except Exception as e:
-        print("Error Connecting")
-        logger.error(str(e))
+  time.sleep(1)
 
 # Print Welcome msg from Server
 print(client_socket.recv(1024).decode())
 
-while True:
-    print("Game Stuff")
+# while True:
+#     print("Game Stuff")
 
 
 def convert_empty_board_position(s):

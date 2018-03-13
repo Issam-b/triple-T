@@ -11,27 +11,30 @@ import threading
 import string
 import random
 import time
+from configparser import ConfigParser
 
 # command codenames between sever and client
+message_length = 2
 commands = {
-    'move': { 'cmd': 'm', 'len': '2'},
+    'move': 'm',
     'quit': 'q',
-    'echo': { 'cmd': 'e', 'len': '2'},
-    'confirm': { 'cmd': 'c', 'len': '2'},
+    'echo': 'e',
+    'confirm': 'c',
     'confirm_states': {
-        'id_received': '1',
-        'game_info_received': '2',
+        'game_info_received': '1',
+        'id_received': '2'
+        
     },
-    'lose': { 'cmd': 'l', 'len': '1'},
-    'win': { 'cmd': 'w', 'len': '1'},
-    'draw': { 'cmd': 'd', 'len': '1'},
-    'your_turn': { 'cmd': 'u', 'len': '1'},
-    'other_turn': { 'cmd': 'o', 'len': '1'},
-    'game_info': { 'cmd': 'g', 'len': '6'}
+    'lose': 'l',
+    'win': 'w',
+    'draw': 'd',
+    'your_turn': 'u',
+    'other_turn': 'o',
+    'game_info': 'g'
 }
 
 # setup logging file and format of log statement
-logging.config.fileConfig('logging.conf')
+logging.config.fileConfig('settings.conf')
 logger = logging.getLogger('server')
 
 class Server:
@@ -62,11 +65,11 @@ class Server:
                 option = input('Choose an option:\n[N]ew port | [Q]uit : ')
                 
                 # assign new port or exit
-                if(option.lower()) == 'n':
+                if option.lower() == 'n':
                     port = input('Enter new port number: ')
                     logger.info('New port specified: ' + str(port))
                     print('\n')
-                elif(option.lower()) == 'q':
+                elif option.lower() == 'q':
                     logger.info('Exit the program!')
                     exit(0)
                 else:
@@ -89,17 +92,24 @@ class GameServer(Server):
         Server.__init__(self)
         # bind to port number as integer
         self.bind_server(host, int(port))
-        matchingThread = threading.Thread(target=self.find_opponent(), args=())
-        matchingThread.daemon = True             
-        matchingThread.start()
 
     def start(self):
         """Start the game server."""
-        # variable to keep track of connected clients
         self.__receive_connections()
 
     def __receive_connections(self):
         """show connected clients."""
+
+        # check connection thread
+        check_conn_thread = threading.Thread(target=self.check_connection_thread, args=())
+        check_conn_thread.daemon = True
+        # check_conn_thread.start()
+
+        # variable to keep track of connected clients
+        matchingThread = threading.Thread(target=self.find_opponent, args=())
+        matchingThread.daemon = True             
+        matchingThread.start()
+
         # get connection instances
         while True:
             conn, addr = self.server_socket.accept()
@@ -109,19 +119,42 @@ class GameServer(Server):
                 # cThread = threading.Thread(target=self.__client_handler, args=(new_player,))
                 # cThread.daemon = True             
                 # cThread.start()
-                self.players_waitlist.append(new_player)
-                self.active_players.append(new_player)
+                GameServer.players_waitlist.append(new_player)
+                GameServer.active_players.append(new_player)
                 logger.info('Total connected clients number is: ' + str(GameServer.players_count_history))
+
+                
+
             except Exception as e:
                 logger.error("Couldn't create a thread, terminating client session. Exception details: " + str(e))
                 # close the current connection
                 new_player.conn.send('e', 'Server error, terminating session')
                 conn.close()
 
+    def check_connection_thread(self):
+        """check connection to clients"""
+        counter = 0
+        logger.info('Running connection check thread')
+        while True:
+            if counter % 10 == 0:
+                logger.info('Active players: ' + str(len(self.active_players)))
+            for player in self.active_players:
+                if player.check_connection() is False:
+                    self.drop_player(player)
+            time.sleep(1)
+            counter += 1
+
     def drop_player(self, player):
         """Disconnect a player or end connection with it"""
         logger.warning('Dropping player id: ' + str(player.id))
-        player.second('Server ended your session.')
+
+        if self in GameServer.players_waitlist:
+            GameServer.players_waitlist.remove(player)
+            print('dropping wait')
+        if self in GameServer.active_players:
+            GameServer.active_players.remove(player)
+            print('dropping active')
+
         player.conn.close()
 
     # def __client_handler(self, player):
@@ -143,36 +176,45 @@ class GameServer(Server):
 
     def find_opponent(self):
         """find an opponenet for the player"""
-        while len(self.players_waitlist) > 1:
-            logger.info('Matching players from waitlist')
-            player1 = self.players_waitlist[0]
-            player2 = self.players_waitlist[1]
-            player1.match = player2
-            player2.match = player1
-            # assign role in the game
-            player1.role= "X"
-            player2.role = "O"
-            # send the players game info
-            player1_send = player1.send_game_info()
-            player2_send = player2.send_game_info()
-            if player1_send and player2_send:
-                try:
-                    gameThread = threading.Thread(target=self.game_thread, args=(player1, player2))
-                    gameThread.daemon = True
-                    gameThread.start()
-                except Exception as e:
-                    logger.error('could not create game thread, exception message: ' + str(e))
+        counter = 0
+        while True:
+            if counter % 10 == 0:
+                logger.info('length of waitlist: ' + str(len(GameServer.players_waitlist)))
+            if len(self.players_waitlist) > 1:
+                logger.info('Matching players from waitlist')
+                player1 = GameServer.players_waitlist[0]
+                player2 = GameServer.players_waitlist[1]
+                player1.match = player2
+                player2.match = player1
+                # assign role in the game
+                player1.role= "X"
+                player2.role = "O"
+                player1.opponenet = player2.id
+                player2.opponenet = player1.id
+                # send the players game info
+                player1_send = player1.send_game_info()
+                player2_send = player2.send_game_info()
+                if player1_send is True and player2_send is True:
+                    try:
+                        gameThread = threading.Thread(target=self.game_thread, args=(player1, player2))
+                        gameThread.daemon = True
+                        gameThread.start()
+                        player1.is_waiting = False
+                        player2.is_waiting = False
+                    except Exception as e:
+                        logger.error('could not create game thread, exception message: ' + str(e))
 
-            else:
-                if player1_send is True and player2_send is False:
-                    GameServer.players_waitlist.append(player1)
-                    # TODO: send other player that his opponent is disconnected
-                if player2_send is True and player1_send is False:
-                    GameServer.players_waitlist.append(player2)
-                    # TODO: send other player that his opponent is disconnected
+                else:
+                    if player1_send is True and player2_send is False:
+                        GameServer.players_waitlist.append(player1)
+                        # TODO: send other player that his opponent is disconnected
+                    if player2_send is True and player1_send is False:
+                        GameServer.players_waitlist.append(player2)
+                        # TODO: send other player that his opponent is disconnected
 
-        # wait for 1 second
-        time.sleep(1)
+            # wait for 1 second
+            time.sleep(1)
+            counter += 1
 
     def game_thread(self, player1, player2):
         """start a new game in seperate thread"""
@@ -196,15 +238,17 @@ class Game:
 
     def start(self):
         """start the current game"""
-         logger.info('Starting the game between: ' + str(new_game.player1.id) + ' and: ' + str(new_game.player2.id))
+        logger.info('Starting the game between: ' + str(self.player1.id) + ' and: ' + str(self.player2.id))
         # move players
-        if(self.move(self.player1, self.player2))
+        if self.move(self.player1, self.player2) is True:
             return
-        if(self.move(self.player1, self.player2))
+        if self.move(self.player1, self.player2) is True:
             return
 
     def move(self, player1, player2):
         """move the players by turn"""
+        logger.info('moving')
+        return True
         # TODO: implement move and win and lose
 
 class Player:
@@ -217,17 +261,18 @@ class Player:
         GameServer.players_count_history += 1
         self.conn = conn
         self.is_waiting = True
-        self.id = self.__id_generator()
+        # self.id = self.__id_generator()
+        self.id = GameServer.players_count_history
         logger.info('player with id: ' + str(self.id) + ' has joined.')
-        self.role = None
-        self.opponenet = None
+        self.role = ''
+        self.opponenet = ''
 
     def send(self, command, msg):
         """Send data from server to player"""
         try:
             # TODO: add encryption
-            self.conn.send((commands[command] + msg).encode())
-            logger.info('sending: ' + str(command) + ' to: ' + str(self.id))
+            self.conn.send((command + msg).encode())
+            # logger.info('sending: ' + str(command) + ' to: ' + str(self.id))
         except:
 			# assume player is lost if an error accured
             self.__lost_connection()
@@ -239,58 +284,73 @@ class Player:
             # TODO: add decryption
 			# If received a quit signal from the client, print msg
             # TODO: ignore any command that is unknown
-            if(len(msg) > 0 ):
+            if len(msg) > 0:
                 logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
-                if(msg[0] == commands['quit']):
-                    logging.info(msg[1:])
-                    self.__lost_connection()
+                if msg[0] == commands['quit']:
+                    # logging.info(msg[1:])
+                    logger.warning('Player: ' + str(self.id) + ' asked to quit')
+                    self.conn.close()
+                    GameServer.drop_player(self)
+                    # self.__lost_connection()
                 # If the message is not the expected type
-                elif(msg[0] != commands[expected_command]):
+                elif msg[0] != expected_command:
                     # Connection lost
-                    self.__lost_connection()
+                    # self.__lost_connection()
+                    logger.warning('Received unexpected message')
                 # If received an integer from the client
-                elif(msg[0] == commands['move']):
+                elif msg[0] == commands['move']:
                     # Return the integer
                     return int(msg[1:])
                 else:
-                    return msg
-        except Exception as e:
+                    return msg[1:]
+                return msg
+        except Exception as es:
 			# assume player connection is lost if received nothing
-            logger.error('Got exception while receiving msg: ' + str(e))
-            self.__lost_connection()
+            logger.error('Got exception while receiving msg: ' + str(es))
+            # self.__lost_connection()
+            # TODO: maybe try to receive again
+
         return None
 
     def check_connection(self):
         """check if the player's connection is still alive, return true or false"""
         self.send(commands['echo'], 'f')
-        if(self.receive(2, "e") == "f"):
+        if self.receive(2, 'e') == 'f':
             return True
-        return False
+        else:
+            self.__lost_connection()
+            return False
 
     def send_game_info(self):
         """send the player his assigned role and matched opponenet."""
         # send game info to player
         counter = 0
-        msg = str(self.role + self.opponenet)
+        # msg = str(self.role + self.opponenet)
+        msg = str(self.role)
         while True:
             self.send(commands['game_info'], msg)
             # tries to send for two times
             counter += 1
-            logger.info('Sending game info to: ' + str(self.id) + ' for ' + counter + ' time')
-            if self.receive(commands['confirm']['len'], commands['confirm']) != commands['confirm_states']['game_info_received'] and counter == 2:
-                if self.check_connection() is not False:
+            logger.info('Sending game info to: ' + str(self.id) + ' for ' + str(counter) + ' time')
+            if int(self.receive(message_length, commands['confirm'])) != int(commands['confirm_states']['game_info_received']):
+                # if counter == 2 and self.check_connection() is False:
+                if counter == 2:
                     # try again to check if player is connected
                     self.__lost_connection()
                     # remove player from our lists
-                    GameServer.players_waitlist.remove(self)
-                    GameServer.active_players.remove(self)
+                    if self in GameServer.players_waitlist:
+                        GameServer.players_waitlist.remove(self)
+                    if self in GameServer.active_players:
+                        GameServer.active_players.remove(self)
                     # return false
                     return False
                     # TODO: send other guy that opponnent is disconnected
+                else:
+                    logger.warning('Player: ' + str(self.id) + ' did not confirm receiving, try second time')
             else:
                 # sent and receive successful
-                logger.warning('Player: ' + str(self.id) + 'did not confirm receiving')
-                GameServer.players_waitlist.remove(self)
+                if self in GameServer.players_waitlist:
+                    GameServer.players_waitlist.remove(self)
                 return True
 
     def __lost_connection(self):
@@ -298,8 +358,6 @@ class Player:
         logger.warning('Player: ' + str(self.id) + ' has lost connection!')
         # inform second player that his opponent has left the game
         # remove the player from our lists
-        GameServer.players_waitlist.remove(self)
-        GameServer.active_players.remove(self)
         # TODO: self.conn.send()
 
     def __id_generator(self, size = 4, chars = string.ascii_lowercase + string.digits):
@@ -308,9 +366,14 @@ class Player:
 
 
 def main():
+    # get configuration
+    config = ConfigParser()
+    config.read('settings.conf')
+    port = config.get('connection', 'port')
+
     try:
         # start game server
-        server = GameServer('', 8080).start()
+        server = GameServer('', int(port)).start()
         # close the socket connection before terminating the server
         server.close()
 
