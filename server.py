@@ -23,8 +23,9 @@ commands = {
     'confirm_states': {
         'game_info_received': '1',
         'id_received': '2'
-        
+
     },
+    'board': 'b',
     'lose': 'l',
     'win': 'w',
     'draw': 'd',
@@ -44,7 +45,7 @@ class Server:
         """Initializes the server object with a server socket."""
 		# create the TCP/IP socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
+
     def bind_server(self, host, port):
         """bind and listen to the the given port."""
 
@@ -60,10 +61,10 @@ class Server:
             except socket.error as e:
                 # print errors
                 logger.error(str(e))
-                
+
                 # show menu
                 option = input('Choose an option:\n[N]ew port | [Q]uit : ')
-                
+
                 # assign new port or exit
                 if option.lower() == 'n':
                     port = input('Enter new port number: ')
@@ -79,7 +80,7 @@ class Server:
     def close(self):
         logger.info('Closing socket')
         self.server_socket.close()
-            
+
 class GameServer(Server):
     """Handle game start and clients management."""
 
@@ -107,7 +108,7 @@ class GameServer(Server):
 
         # variable to keep track of connected clients
         matchingThread = threading.Thread(target=self.find_opponent, args=())
-        matchingThread.daemon = True             
+        matchingThread.daemon = True
         matchingThread.start()
 
         # get connection instances
@@ -123,7 +124,7 @@ class GameServer(Server):
                 GameServer.active_players.append(new_player)
                 logger.info('Total connected clients number is: ' + str(GameServer.players_count_history))
 
-                
+
 
             except Exception as e:
                 logger.error("Couldn't create a thread, terminating client session. Exception details: " + str(e))
@@ -233,7 +234,7 @@ class Game:
     def __init__(self, player1, player2):
         """initiate the game"""
         logger.info('Matched player: ' + str(player1.id) + ' with opponenet: ' +
-            str(player1.opponenet) + ' the role of: ' + str(player1.role)) 
+            str(player1.opponenet) + ' the role of: ' + str(player1.role))
         self.player1 = player1
         self.player2 = player2
         self.board = list('         ')
@@ -247,11 +248,61 @@ class Game:
         if self.move(self.player1, self.player2) is True:
             return
 
+
+
     def move(self, player1, player2):
         """move the players by turn"""
         logger.info('moving')
-        return True
-        # TODO: implement move and win and lose
+        # Send both players the current board
+        player1.send(commands['board'], ("".join(self.board)))
+        player2.send(commands['board'], ("".join(self.board)))
+        # Let the player1 move, "your_turn" stands for yes it's turn to move,
+        # "other_turn" stands for no and waiting
+        #if Player.read_buffer('move'):
+        player1.send("m", "your_turn")
+        player2.send("m", "other_turn")
+
+        # Receive the move from the moving player
+        move = int(player1.read_buffer('move'))
+        # Send the move to the waiting player
+        player2.send(commands['board'], str(move))
+        # Check if the position is empty
+        if self.board[move - 1] == " ":
+            # Write the it into the board
+            self.board[move - 1] = player1.role
+        else:
+            logging.warning("Player " + str(player1.id) +
+                            " is attempting to take a position that's already " +
+                            "been taken.")
+        # Check if this will result in a win
+        result, winning_path = self.check_winner(player1);
+        if (result >= 0):
+            # If there is a result
+            # Send back the latest board content
+            player1.send("B", ("".join(self.board)));
+            player2.send("B", ("".join(self.board)));
+
+            if (result == 0):
+                # If this game ends with a draw
+                # Send the players the result
+                player1.send("C", "D");
+                player2.send("C", "D");
+                print("Game between player " + str(self.player1.id) + " and player "
+                      + str(self.player2.id) + " ends with a draw.");
+                return True;
+            if (result == 1):
+                # If this player wins the game
+                # Send the players the result
+                player1.send("C", "W");
+                player2.send("C", "L");
+                # Send the players the winning path
+                player1.send("P", winning_path);
+                player2.send("P", winning_path);
+                print("Player " + str(self.player1.id) + " beats player "
+                      + str(self.player2.id) + " and finishes the game.");
+                return True;
+            return False;
+    # TODO: implement win and lose
 
 class Player:
     """Player class to keep track of availble players and their status"""
@@ -270,6 +321,7 @@ class Player:
         self.opponenet = ''
         self.cmd_buffer = {
             'move': '',
+            'board': '',
             'quit': '',
             'echo': '',
             'confirm': '',
@@ -307,7 +359,7 @@ class Player:
                     if cmd == msg[0]:
                         recv_cmd = key
                         break
-                
+
                 cmd_type_1 = {'quit', 'lose', 'win', 'your_turn', 'other_turn'}
                 cmd_type_2 = {'echo', 'move', 'confirm'}
 
@@ -337,7 +389,7 @@ class Player:
         #     self.conn.close()
         #     GameServer.drop_player(self)
         #     # self.__lost_connection()
-        
+
         # # echo command
         # elif msg[0] == commands['echo']:
         #     return 
@@ -428,6 +480,6 @@ def main():
     except Exception as e:
         logger.error(str(e))
 
-    
+
 if __name__ == __name__:
     main()
