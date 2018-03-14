@@ -245,7 +245,7 @@ class Game:
         # move players
         if self.move(self.player1, self.player2) is True:
             return
-        if self.move(self.player1, self.player2) is True:
+        if self.move(self.player2, self.player1) is True:
             return
 
 
@@ -259,8 +259,8 @@ class Game:
         # Let the player1 move, "your_turn" stands for yes it's turn to move,
         # "other_turn" stands for no and waiting
         #if Player.read_buffer('move'):
-        player1.send("m", "your_turn")
-        player2.send("m", "other_turn")
+        player1.send(commands['confirm'], "your_turn")
+        player2.send(commands['confirm'], "other_turn")
 
         # Receive the move from the moving player
         move = int(player1.read_buffer('move'))
@@ -275,26 +275,26 @@ class Game:
                             " is attempting to take a position that's already " +
                             "been taken.")
         # Check if this will result in a win
-        result, winning_path = self.check_winner(player1);
+        result, winning_path = self.check_winner(player1)
         if (result >= 0):
             # If there is a result
             # Send back the latest board content
-            player1.send("B", ("".join(self.board)));
-            player2.send("B", ("".join(self.board)));
+            player1.send(commands['board'], ("".join(self.board)));
+            player2.send(commands['board'], ("".join(self.board)));
 
             if (result == 0):
                 # If this game ends with a draw
                 # Send the players the result
-                player1.send("C", "D");
-                player2.send("C", "D");
+                player1.send(commands['confirm'], commands['draw']);
+                player2.send(commands['draw'], commands['draw']);
                 print("Game between player " + str(self.player1.id) + " and player "
                       + str(self.player2.id) + " ends with a draw.");
                 return True;
             if (result == 1):
                 # If this player wins the game
                 # Send the players the result
-                player1.send("C", "W");
-                player2.send("C", "L");
+                player1.send(commands['confirm'], commands['win']);
+                player2.send(commands['confirm'], commands['lose']);
                 # Send the players the winning path
                 player1.send("P", winning_path);
                 player2.send("P", winning_path);
@@ -302,7 +302,42 @@ class Game:
                       + str(self.player2.id) + " and finishes the game.");
                 return True;
             return False;
-    # TODO: implement win and lose
+
+    def check_winner(self, player):
+        """Checks if the player wins the game. Returns 1 if wins,
+        0 if it's a draw, -1 if there's no result yet."""
+        s = self.board_content;
+
+        # Check columns
+        if (len(set([s[0], s[1], s[2], player.role])) == 1):
+            return 1, "012";
+        if (len(set([s[3], s[4], s[5], player.role])) == 1):
+            return 1, "345";
+        if (len(set([s[6], s[7], s[8], player.role])) == 1):
+            return 1, "678";
+
+        # Check rows
+        if (len(set([s[0], s[3], s[6], player.role])) == 1):
+            return 1, "036";
+        if (len(set([s[1], s[4], s[7], player.role])) == 1):
+            return 1, "147";
+        if (len(set([s[2], s[5], s[8], player.role])) == 1):
+            return 1, "258";
+
+        # Check diagonal
+        if (len(set([s[0], s[4], s[8], player.role])) == 1):
+            return 1, "048";
+        if (len(set([s[2], s[4], s[6], player.role])) == 1):
+            return 1, "246";
+
+        # If there's no empty position left, draw
+        if " " not in s:
+            return 0, "";
+
+        # The result cannot be determined yet
+        return -1, "";
+
+   
 
 class Player:
     """Player class to keep track of availble players and their status"""
@@ -354,19 +389,22 @@ class Player:
             if len(msg) > 0:
                 logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
                 recv_cmd = ''
-                items = commands.items()
-                for key, cmd in items:
-                    if cmd == msg[0]:
-                        recv_cmd = key
-                        break
+                if size == 10:
+                    self.cmd_buffer['board'] = msg[1:]
+                else:
+                    items = commands.items()
+                    for key, cmd in items:
+                        if cmd == msg[0]:
+                            recv_cmd = key
+                            break
 
-                cmd_type_1 = {'quit', 'lose', 'win', 'your_turn', 'other_turn'}
-                cmd_type_2 = {'echo', 'move', 'confirm'}
+                    cmd_type_1 = {'quit', 'lose', 'win', 'your_turn', 'other_turn'}
+                    cmd_type_2 = {'echo', 'move', 'confirm'}
 
-                if recv_cmd in cmd_type_1:
-                    self.cmd_buffer[str(recv_cmd)] = True
-                elif recv_cmd in cmd_type_2:
-                    self.cmd_buffer[str(recv_cmd)] = msg[1:]
+                    if recv_cmd in cmd_type_1:
+                        self.cmd_buffer[str(recv_cmd)] = True
+                    elif recv_cmd in cmd_type_2:
+                        self.cmd_buffer[str(recv_cmd)] = msg[1:]
 
         except Exception as es:
             logger.error('Got exception while receiving msg: ' + str(es))
@@ -375,11 +413,15 @@ class Player:
         """Receive data from player and check the validity of the data."""
         # TODO put each player in a seperate thread
         # fetch data
-        self.receive_populate_buffer()
+        if expected_command == 'board':
+            self.receive_populate_buffer(10)
+        else:
+            self.receive_populate_buffer()
+
         # read buffer and save value needed
         cmd_to_return = self.cmd_buffer[str(expected_command)]
         # clear it after reading it
-        self.cmd_buffer[str(expected_command)] = ''
+        # self.cmd_buffer[str(expected_command)] = ''
 
         return cmd_to_return
 
