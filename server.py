@@ -141,8 +141,8 @@ class GameServer(Server):
                 logger.info('Active players: ' + str(len(self.active_players)))
             for player in self.active_players:
                 player.receive_populate_buffer()
-                if player.check_connection() is False:
-                    self.drop_player(player)
+                # if player.check_connection() is False:
+                #     self.drop_player(player)
             time.sleep(1)
             counter += 1
 
