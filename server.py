@@ -12,6 +12,7 @@ import string
 import random
 import time
 from configparser import ConfigParser
+import ssl
 
 # command codenames between sever and client
 message_length = 10
@@ -37,6 +38,9 @@ commands = {
     'game_info': 'g'
 }
 
+KEY = 'server_key.pem'
+CERT = 'server_cert.pem'
+
 # setup logging file and format of log statement
 logging.config.fileConfig('settings.conf')
 logger = logging.getLogger('server')
@@ -57,6 +61,8 @@ class Server:
                 self.server_socket.bind((host, int(port)))
                 logger.info('Bind successful to port ' + str(port))
                 self.server_socket.listen(5)
+                # ssl socket wrap
+                self.socket_ssl = ssl.wrap_socket(self.server_socket, keyfile=KEY, certfile=CERT, server_side=True)
                 logger.info('Listening on port ' + str(port))
                 break
 
@@ -94,12 +100,17 @@ class GameServer(Server):
 
         # get connection instances
         while True:
-            conn, addr = self.server_socket.accept()
-            logger.info('Connected to: ' + str(addr[0]) + ':' + str(addr[1]))
+            try:
+                # accept connections with ssl socket wrap
+                conn, addr = self.socket_ssl.accept()
+                logger.info('Connected to: ' + str(addr[0]) + ':' + str(addr[1]))
+            except Exception as e:
+                logger.error("Couldn't create secure connection to player, " + str(e))
+                raise
+
             try:
                 new_player = Player(conn)
                 # recvThread = threading.Thread(target=self.player_receive_daemon, args=(new_player,), daemon=True).start()
-
                 connThread = threading.Thread(target=self.player_check_connection, args=(new_player,), daemon=True).start()
                 
                 GameServer.players_waitlist.append(new_player)
@@ -472,7 +483,7 @@ def main():
         exit(-1)
 
     except Exception as e:
-        logger.error(str(e))
+        logger.error("Unexpected exit of game" + str(e))
 
 
 if __name__ == __name__:

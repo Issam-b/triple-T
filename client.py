@@ -10,6 +10,9 @@ import time
 import logging
 import logging.config
 import threading
+import ssl
+
+CERT = 'server_cert.pem'
 
 logging.config.fileConfig('settings.conf')
 logger = logging.getLogger('client')
@@ -57,7 +60,7 @@ class ClientConnection():
         # Create the socket object
         # 1st parameter: IPv4 networking
         # 2nd parameter: socket type, SOCK_STREAM = TCP
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def client_connect(self):
         """connect to server function"""
@@ -71,6 +74,8 @@ class ClientConnection():
 
                 # Connect to host address, port
                 logger.info("Trying to Connect Server...")
+                # use connection with ssl wrapped socket
+                self.client_socket = ssl.wrap_socket(self.socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
                 self.client_socket.connect((address, int(port)))
                 logger.info("Connected to Server")
 
