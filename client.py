@@ -89,7 +89,6 @@ class ClientConnection():
         """receive commands and save to buffer untill read by server"""
         try:
             msg = self.client_socket.recv(size).decode()
-            # TODO: add decryption
 
             if len(msg) > 0:
                 # logger.info('received: ' + str(msg))
@@ -133,7 +132,6 @@ class ClientConnection():
     def client_send(self, cmd, msg):
         """Send data from server to player"""
         try:
-            # TODO: add encryption
             # logger.info('Sending: ' + str(cmd + msg))
             self.client_socket.send((cmd + msg).encode())
 

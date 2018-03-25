@@ -45,12 +45,13 @@ CERT = 'server_cert.pem'
 logging.config.fileConfig('settings.conf')
 logger = logging.getLogger('server')
 
+
 class Server:
     """Server class to handle connection related calls."""
 
     def __init__(self):
         """Initializes the server object with a server socket."""
-		# create the TCP/IP socket
+        # create the TCP/IP socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def bind_server(self, host, port):
@@ -62,7 +63,8 @@ class Server:
                 logger.info('Bind successful to port ' + str(port))
                 self.server_socket.listen(5)
                 # ssl socket wrap
-                self.socket_ssl = ssl.wrap_socket(self.server_socket, keyfile=KEY, certfile=CERT, server_side=True)
+                self.socket_ssl = ssl.wrap_socket(
+                    self.server_socket, keyfile=KEY, certfile=CERT, server_side=True)
                 logger.info('Listening on port ' + str(port))
                 break
 
@@ -73,6 +75,7 @@ class Server:
     def close(self):
         logger.info('Closing socket')
         self.server_socket.close()
+
 
 class GameServer(Server):
     """Handle game start and clients management."""
@@ -96,31 +99,39 @@ class GameServer(Server):
         """show connected clients."""
 
         # variable to keep track of connected clients
-        matchingThread = threading.Thread(target=self.find_opponent, args=(), daemon=True).start()
+        matchingThread = threading.Thread(
+            target=self.find_opponent, args=(), daemon=True).start()
 
         # get connection instances
         while True:
             try:
                 # accept connections with ssl socket wrap
                 conn, addr = self.socket_ssl.accept()
-                logger.info('Connected to: ' + str(addr[0]) + ':' + str(addr[1]))
+                logger.info('Connected to: ' +
+                            str(addr[0]) + ':' + str(addr[1]))
             except Exception as e:
-                logger.error("Couldn't create secure connection to player, " + str(e))
+                logger.error(
+                    "Couldn't create secure connection to player, " + str(e))
                 raise
 
             try:
                 new_player = Player(conn)
                 # recvThread = threading.Thread(target=self.player_receive_daemon, args=(new_player,), daemon=True).start()
-                connThread = threading.Thread(target=self.player_check_connection, args=(new_player,), daemon=True).start()
-                
+                connThread = threading.Thread(
+                    target=self.player_check_connection, args=(new_player,), daemon=True).start()
+
                 GameServer.players_waitlist.append(new_player)
                 GameServer.active_players.append(new_player)
-                logger.info('Waiting players: ' + str(len(GameServer.players_waitlist)))
-                logger.info('Active online players are: ' + str(len(GameServer.active_players)))
-                logger.info('Number of all served players is: ' + str(GameServer.players_count_history))
+                logger.info('Waiting players: ' +
+                            str(len(GameServer.players_waitlist)))
+                logger.info('Active online players are: ' +
+                            str(len(GameServer.active_players)))
+                logger.info('Number of all served players is: ' +
+                            str(GameServer.players_count_history))
 
             except Exception as e:
-                logger.error("Couldn't create a thread, terminating client session. Exception details: " + str(e))
+                logger.error(
+                    "Couldn't create a thread, terminating client session. Exception details: " + str(e))
                 conn.close()
 
     def drop_player(self, player):
@@ -131,16 +142,16 @@ class GameServer(Server):
             opponent = self.get_opponent(player)
             if opponent is not None:
                 # inform opponent then drop it from server lists
-                opponent.send(commands['state'], commands['state_types']['other_disconnected'])
+                opponent.send(
+                    commands['state'], commands['state_types']['other_disconnected'])
                 if game in self.active_games:
                     self.active_games.remove(game)
-                
 
         if player in GameServer.players_waitlist:
             GameServer.players_waitlist.remove(player)
         if player in GameServer.active_players:
             GameServer.active_players.remove(player)
-            
+
         player.conn.close()
 
     def player_receive_daemon(self, player):
@@ -154,17 +165,19 @@ class GameServer(Server):
 
     def player_check_connection(self, player):
         """create a thread for the player and check his connection periodically"""
-        logger.info('Running connection check thread on player: ' + str(player.id))
+        logger.info(
+            'Running connection check thread on player: ' + str(player.id))
         while True:
             challenge = 'f'
             player.send(commands['echo'], challenge)
             player.receive_populate_buffer()
             echo_value = player.read_buffer('echo')
             quit_cmd = player.read_buffer('quit')
-           
+
             if quit_cmd or player.disconected or echo_value != challenge:
                 if quit_cmd:
-                    logger.warning('Player: ' + str(player.id) + ' asked to quit')
+                    logger.warning(
+                        'Player: ' + str(player.id) + ' asked to quit')
 
                 self.drop_player(player)
                 break
@@ -181,7 +194,7 @@ class GameServer(Server):
                 player1.match = player2
                 player2.match = player1
                 # assign role in the game
-                player1.role= "X"
+                player1.role = "X"
                 player2.role = "O"
                 player1.opponenet = player2.id
                 player2.opponenet = player1.id
@@ -190,14 +203,16 @@ class GameServer(Server):
                 player2_send = player2.send_game_info()
                 if player1_send is True and player2_send is True:
                     try:
-                        gameThread = threading.Thread(target=self.game_thread, args=(player1, player2), daemon=True).start()
+                        gameThread = threading.Thread(target=self.game_thread, args=(
+                            player1, player2), daemon=True).start()
                         player1.is_waiting = False
                         player2.is_waiting = False
                     except Exception as e:
-                        logger.error('could not create game thread, exception message: ' + str(e))
+                        logger.error(
+                            'could not create game thread, exception message: ' + str(e))
 
                 else:
-                    if not player1_send and  not player2_send:
+                    if not player1_send and not player2_send:
                         if {player1, player2} in GameServer.players_waitlist:
                             GameServer.players_waitlist.remove(player2)
                             GameServer.players_waitlist.remove(player1)
@@ -205,11 +220,13 @@ class GameServer(Server):
                         if player1_send is True:
                             if player2 in GameServer.players_waitlist:
                                 GameServer.players_waitlist.remove(player2)
-                            player1.send(commands['state'], commands['state_types']['other_disconnected'])
+                            player1.send(
+                                commands['state'], commands['state_types']['other_disconnected'])
                         if player2_send is True:
                             if player1 in GameServer.players_waitlist:
                                 GameServer.players_waitlist.remove(player1)
-                            player2.send(commands['state'], commands['state_types']['other_disconnected'])
+                            player2.send(
+                                commands['state'], commands['state_types']['other_disconnected'])
 
             time.sleep(1)
 
@@ -223,7 +240,6 @@ class GameServer(Server):
                 return game.player1
         else:
             return None
-
 
     def get_game(self, player):
         """return an object game related to a player"""
@@ -249,7 +265,8 @@ class Game:
 
     def __init__(self, player1, player2):
         """initiate the game"""
-        logger.info('Matched player: ' + str(player1.id) + ' with opponenet: ' + str(player1.opponenet))
+        logger.info('Matched player: ' + str(player1.id) +
+                    ' with opponenet: ' + str(player1.opponenet))
         self.player1 = player1
         self.player2 = player2
         self.moves_counter = 0
@@ -258,7 +275,8 @@ class Game:
 
     def start(self):
         """start the current game"""
-        logger.info('Starting the game between: ' + str(self.player1.id) + ' and: ' + str(self.player2.id))
+        logger.info('Starting the game between: ' +
+                    str(self.player1.id) + ' and: ' + str(self.player2.id))
         while True:
             # alternate moves between players
             if self.move(self.player1, self.player2):
@@ -274,8 +292,10 @@ class Game:
         waiting_player.send(commands['board'], board_content)
         # Let the moving_player move, "your_turn" stands for yes it's turn to move,
         # "other_turn" stands for no and waiting
-        moving_player.send(commands['state'], commands['state_types']['your_turn'])
-        waiting_player.send(commands['state'], commands['state_types']['other_turn'])
+        moving_player.send(commands['state'],
+                           commands['state_types']['your_turn'])
+        waiting_player.send(commands['state'],
+                            commands['state_types']['other_turn'])
 
         try:
             # Receive the move from the moving player
@@ -286,7 +306,8 @@ class Game:
                 self.board[move - 1] = moving_player.role
                 self.moves_counter += 1
             else:
-                logging.warning("Player " + str(moving_player.id) + " wants to take a taken position")
+                logging.warning("Player " + str(moving_player.id) +
+                                " wants to take a taken position")
         except Exception as e:
             logger.error('Expected an integer move')
             raise
@@ -300,17 +321,22 @@ class Game:
 
                 if (result == 0):
                     # If this game ends with a draw, send the players the result
-                    moving_player.send(commands['state'], commands['state_types']['draw'])
-                    waiting_player.send(commands['state'], commands['state_types']['draw'])
+                    moving_player.send(
+                        commands['state'], commands['state_types']['draw'])
+                    waiting_player.send(
+                        commands['state'], commands['state_types']['draw'])
                     logger.info('Game between player ' + str(moving_player.id) + ' and '
-                        + str(waiting_player.id) + ' ended with a draw.')
+                                + str(waiting_player.id) + ' ended with a draw.')
                     return True
                 if (result == 1):
                     # Send the players the result if current player wins
-                    moving_player.send(commands['state'], commands['state_types']['win'])
-                    waiting_player.send(commands['state'], commands['state_types']['lose'])
+                    moving_player.send(
+                        commands['state'], commands['state_types']['win'])
+                    waiting_player.send(
+                        commands['state'], commands['state_types']['lose'])
 
-                    logger.info('Player ' + str(moving_player.id) + ' beated player ' + str(waiting_player.id))
+                    logger.info('Player ' + str(moving_player.id) +
+                                ' beated player ' + str(waiting_player.id))
                     return True
                 return False
 
@@ -378,11 +404,10 @@ class Player:
     def send(self, command, msg):
         """Send data from server to player"""
         try:
-            # TODO: add encryption
             self.conn.send((command + msg).encode())
             # logger.info('sending: ' + str(command + msg) + ' to: ' + str(self.id))
         except Exception as e:
-			# assume player connection is lost if an error accured
+                        # assume player connection is lost if an error accured
             self.lost_connection()
 
     def receive_populate_buffer(self, size=message_length):
@@ -390,7 +415,6 @@ class Player:
         try:
             self.conn.settimeout(5.0)
             msg = self.conn.recv(size).decode()
-            # TODO: add decryption
             if len(msg) > 0:
                 # logger.info('received: ' + str(msg) + ' from: ' + str(self.id))
                 recv_cmd = ''
@@ -413,7 +437,7 @@ class Player:
 
     def receive(self, expected_command):
         """Receive data from player and check the validity of the data."""
-        
+
         # fetch data
         while self.cmd_buffer[str(expected_command)] == '' and not self.disconected:
             # self.receive_populate_buffer()
@@ -453,8 +477,9 @@ class Player:
                 success_state = True
 
         except Exception as e:
-            logger.error('Expected a valid integer, exception message: ' + str(e))
-        
+            logger.error(
+                'Expected a valid integer, exception message: ' + str(e))
+
         return success_state
 
     def lost_connection(self):
