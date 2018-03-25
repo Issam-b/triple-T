@@ -150,7 +150,7 @@ class GameServer(Server):
             if player.disconected:
                 break
             player.receive_populate_buffer()
-            time.sleep(1)
+            # time.sleep(1)
 
     def player_check_connection(self, player):
         """create a thread for the player and check his connection periodically"""
@@ -417,7 +417,7 @@ class Player:
         # fetch data
         while self.cmd_buffer[str(expected_command)] == '' and not self.disconected:
             # self.receive_populate_buffer()
-            time.sleep(1)
+            time.sleep(0.1)
 
         # read buffer and save value needed
         cmd_to_return = self.cmd_buffer[str(expected_command)]
@@ -437,7 +437,7 @@ class Player:
         msg = str(self.role)
         logger.info('Sending game info to: ' + str(self.id))
         # tries to send for two times if having an error at first
-        self.send(commands['game_info'], msg)  
+        self.send(commands['game_info'], msg)
         try:
             if int(self.receive('confirm')) != int(commands['confirm_states']['game_info_received']):
                 self.lost_connection()

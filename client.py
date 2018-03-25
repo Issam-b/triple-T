@@ -117,7 +117,7 @@ class ClientConnection():
             # self.receive_populate_buffer()
             if Game.game_ended:
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
 
         # read buffer and save value needed
         return self.read_buffer(expected_command, clear)
@@ -173,7 +173,7 @@ class Game():
             self.connection.receive_populate_buffer()
             if Game.game_ended:
                 break
-            time.sleep(0.5)
+            # time.sleep(0.5)
 
     def check_states(self):
         """check conneciton to server periodically"""
