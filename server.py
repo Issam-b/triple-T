@@ -309,7 +309,7 @@ class Game:
                 logging.warning("Player " + str(moving_player.id) +
                                 " wants to take a taken position")
         except Exception as e:
-            logger.error('Expected an integer move')
+            logger.error('Expected an integer move, ' + str(e))
             raise
         # Check if this will result in a win
         if self.moves_counter > 4:
@@ -407,7 +407,8 @@ class Player:
             self.conn.send((command + msg).encode())
             # logger.info('sending: ' + str(command + msg) + ' to: ' + str(self.id))
         except Exception as e:
-                        # assume player connection is lost if an error accured
+            # assume player connection is lost if an error accured
+            logger.error("Send exception: " + str(e))
             self.lost_connection()
 
     def receive_populate_buffer(self, size=message_length):
@@ -456,7 +457,6 @@ class Player:
     def send_game_info(self):
         """send the player his assigned role and matched opponenet."""
         # send game info to player
-        counter = 0
         success_state = False
         msg = str(self.role)
         logger.info('Sending game info to: ' + str(self.id))

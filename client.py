@@ -75,7 +75,8 @@ class ClientConnection():
                 # Connect to host address, port
                 logger.info("Trying to Connect Server...")
                 # use connection with ssl wrapped socket
-                self.client_socket = ssl.wrap_socket(self.socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
+                self.client_socket = ssl.wrap_socket(
+                    self.socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
                 self.client_socket.connect((address, int(port)))
                 logger.info("Connected to Server")
 
@@ -110,7 +111,7 @@ class ClientConnection():
 
     def client_receive(self, expected_command, clear=True):
         """Receive data from player and check the validity of the data."""
-         
+
         # fetch data
         while self.cmd_buffer[str(expected_command)] == '':
             # self.receive_populate_buffer()
@@ -137,12 +138,13 @@ class ClientConnection():
 
         except Exception as e:
             # assume player is lost if an error accured
+            logger.error("Send exception, " + str(e))
             self.connection_lost()
 
     def connection_lost(self):
         """called when connection is lost"""
         logger.error('Connection lost!')
-        raise
+        exit(-1)
 
     def close(self):
         """close the connection"""
@@ -154,16 +156,19 @@ class ClientConnection():
 
 class Game():
     """handle gameplay logic"""
-  
+
     game_ended = False
+
     def __init__(self, connection):
         """init function for game, connect to server and start receive threads"""
         self.game_started = False
         self.connection = connection
         self.connection.client_connect()
 
-        checkConnThread = threading.Thread(target=self.check_states, args=(), daemon=True).start()
-        fetchThread = threading.Thread(target=self.fetch_data, args=(), daemon=True).start()
+        checkConnThread = threading.Thread(
+            target=self.check_states, args=(), daemon=True).start()
+        fetchThread = threading.Thread(
+            target=self.fetch_data, args=(), daemon=True).start()
 
     def fetch_data(self):
         """fetch data from server periodically"""
@@ -178,7 +183,7 @@ class Game():
         logger.info('Running connection check thread')
         while True:
             try:
-                
+
                 self.reply_echo()
                 if not self.game_started:
                     # TODO get player id
@@ -190,7 +195,7 @@ class Game():
                         logger.info('Opponent disconnected, You won!')
                         Game.game_ended = True
                         break
-                
+
             except Exception as e:
                 logger.error("Exception on check states thread, " + str(e))
 
@@ -201,7 +206,8 @@ class Game():
         role = self.connection.read_buffer('game_info')
         if role != '':
             logger.info('Confirming player role is: ' + str(role))
-            self.connection.client_send(commands['confirm'], commands['confirm_states']['game_info_received'])
+            self.connection.client_send(
+                commands['confirm'], commands['confirm_states']['game_info_received'])
             self.game_started = True
 
     def reply_echo(self):
@@ -216,7 +222,7 @@ class Game():
         for i in range(0, 9):
             if board[i] != ' ':
                 new_board[i] = board[i]
-            
+
         return "".join(new_board)
 
     def format_board(self, board):
@@ -237,15 +243,16 @@ class Game():
         while True:
             board_content = self.connection.client_receive('board')
             state = self.connection.client_receive('state')
-            
+
             if Game.game_ended:
                 break
 
             # If it's this player's turn to move
             if state == commands['state_types']['your_turn']:
                 # Print out the current board with " " converted to the position number
-                print('Current board:\n' + self.format_board(self.convert_empty_board_position(board_content)))
-                while True: 
+                print('Current board:\n' +
+                      self.format_board(self.convert_empty_board_position(board_content)))
+                while True:
                     position = 0
                     try:
                         choice = input('please enter the postion (1~9): ')
@@ -257,14 +264,16 @@ class Game():
                             position = int(choice)
                     except Exception as e:
                         if Game.game_ended:
-                            break   
-                        logger.error('Expecting an integer number')
+                            break
+                        logger.error('Expecting an integer number, ' + str(e))
                         pass
                     if position >= 1 and position <= 9:
                         if board_content[position - 1] != " ":
-                            logger.info('That postion is already taken. Please choose another')
+                            logger.info(
+                                'That postion is already taken. Please choose another')
                         else:
-                            self.connection.client_send(commands['move'], str(position))
+                            self.connection.client_send(
+                                commands['move'], str(position))
                             break
             else:
                 print('Current board:\n' + self.format_board(board_content))
@@ -294,10 +303,9 @@ def main():
     # start game
     game = Game(connection)
     game.start()
-    
+
     # close the connection
     connection.close()
-
 
 
 if __name__ == '__main__':
