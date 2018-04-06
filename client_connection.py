@@ -32,15 +32,12 @@ class ClientConnection():
             try:
                 address = game_config.get('connection', 'address')
                 port = game_config.get('connection', 'port')
-
-                # Connect to host address, port
-                logger.info("Trying to Connect Server...")
+                logger.info("Trying to connect to server...")
                 # use connection with ssl wrapped socket
                 self.client_socket = ssl.wrap_socket(
                     self.socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
                 self.client_socket.connect((address, int(port)))
                 logger.info("Connected to Server")
-
                 break
             except Exception as e:
                 logger.error('Error connecting, exception message: ' + str(e))
@@ -51,39 +48,35 @@ class ClientConnection():
         """receive commands and save to buffer untill read by server"""
         try:
             msg = self.client_socket.recv(size).decode()
+            if DEBUG:
+                logger.info('received: ' + str(msg))
+            recv_cmd = ''
+            recv_cmd = self.find_cmd_buffer_key(constants.cmd, msg, recv_cmd)
 
-            if len(msg) > 0:
-                if DEBUG:
-                    logger.info('received: ' + str(msg))
-                recv_cmd = ''
-                cmd = constants.cmd
-                items = cmd.items()
-                for key, cmd in items:
-                    if cmd == msg[0]:
-                        recv_cmd = key
-                        break
-
-                if recv_cmd == 'board' or recv_cmd == 'game_info':
-                    self.cmd_buffer[str(recv_cmd)] = msg[1:]
-                elif recv_cmd == 'timeout':
-                    self.cmd_buffer[str(recv_cmd)] = True
-                else:
-                    self.cmd_buffer[str(recv_cmd)] = msg[1]
+            if recv_cmd == 'board' or recv_cmd == 'game_info':
+                self.cmd_buffer[str(recv_cmd)] = msg[1:]
+            elif recv_cmd == 'timeout':
+                self.cmd_buffer[str(recv_cmd)] = True
+            else:
+                self.cmd_buffer[str(recv_cmd)] = msg[1]
 
         except Exception as es:
             logger.error('Got exception while receiving msg: ' + str(es))
 
-    def client_receive(self, expected_command, clear=True):
-        """Receive data from player and check the validity of the data."""
+    def find_cmd_buffer_key(self, cmd, msg, recv_cmd):
+        items = cmd.items()
+        for key, cmd in items:
+            if cmd == msg[0]:
+                recv_cmd = key
+                break
+        return recv_cmd
 
-        # fetch data
+    def client_receive_with_wait(self, expected_command, clear=True):
+        """Receive data from player and check the validity of the data."""
         while self.cmd_buffer[str(expected_command)] == '':
-            # self.receive_populate_buffer()
             if cg.Game.game_ended:
                 break
             time.sleep(0.1)
-
-        # read buffer and save value needed
         return self.read_buffer(expected_command, clear)
 
     def read_buffer(self, expected_command, clear=True):
@@ -91,7 +84,6 @@ class ClientConnection():
         cmd_to_return = self.cmd_buffer[str(expected_command)]
         if clear:
             self.cmd_buffer[str(expected_command)] = ''
-
         return cmd_to_return
 
     def client_send(self, cmd, msg):
@@ -100,10 +92,9 @@ class ClientConnection():
             if DEBUG:
                 logger.info('Sending: ' + str(cmd + msg))
             self.client_socket.send((cmd + msg).encode())
-
         except Exception as e:
-            # assume player is lost if an error accured
             logger.error("Send exception, " + str(e))
+            # assume player is lost if an error accured
             self.connection_lost()
 
     def connection_lost(self):
@@ -113,7 +104,5 @@ class ClientConnection():
 
     def close(self):
         """close the connection"""
-        # Shut down the socket (prevent more send/rec)
         self.client_socket.shutdown(socket.SHUT_RDWR)
-        # Close Socket
         self.client_socket.close()

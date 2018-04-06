@@ -18,13 +18,7 @@ class Server:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     def bind_server(self, host, port):
-        """bind and listen to the the given port.
-
-        Arguments:
-            host {string} -- destination ip or host address
-            port {integer} -- port number to bind into
-        """
-
+        """bind and listen to the the given port."""
         while True:
             try:
                 self.server_socket.bind((host, int(port)))

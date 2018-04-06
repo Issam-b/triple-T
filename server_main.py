@@ -10,18 +10,16 @@ logger = setup_logger('settings.conf', 'server')
 
 
 def main():
-
     port = game_config.get('connection', 'port')
     try:
-        # start game server
         server = GameServer('', int(port)).start()
-        # close the socket connection before terminating the server
         server.close()
         logger.info('Exiting')
-        exit(-1)
 
     except Exception as e:
         logger.error("Unexpected exit of game" + str(e))
+        server.close()
+        exit(-1)
 
 
 if __name__ == __name__:
