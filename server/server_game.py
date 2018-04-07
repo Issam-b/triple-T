@@ -1,23 +1,31 @@
 #! /usr/bin/python3
 
 import threading
-import sys
 import time
+import sys
 from helpers import setup_logger
-from server import Server
-from constants import cmd
-from server_player import Player
 from helpers import game_config
+from helpers import cmd
+from server import Server
+from server_player import Player
+import socket
+import ssl
+
 
 logger = setup_logger('settings.conf', 'server')
 ECHO_FREQUENCY = int(game_config.get('OTHER', 'ECHO_FREQUENCY'))
 TIMEOUT = int(game_config.get('OTHER', 'TIMEOUT'))
 echo_enable = game_config.get('OTHER', 'echo')
+server2_address = game_config.get('connection', 'address2')
+server2_port = game_config.get('connection', 'port2')
+DEBUG = True if game_config.get('DEBUG', 'DEBUG') == 'True' else False
+message_length = int(game_config.get('OTHER', 'message_length'))
+CERT = game_config.get('SSL', 'CERT')
 
 
 class GameServer(Server):
     """Handle game start and clients management."""
-
+    run_once = False
     players_waitlist = []
     active_players = []
     all_players_count = 0
@@ -35,11 +43,88 @@ class GameServer(Server):
 
     def __receive_connections(self):
         """show connected clients."""
+        logger.info("checking: " + str(server2_address) +
+                    ":" + str(server2_port))
+        running_server_exist, running_server_conn = self.connect_to_running_server(
+            server2_address, server2_port)
+        if running_server_exist:
+            self.echo_running_server(running_server_conn)
+            logger.error("Running server is down, taking over!")
+
         threading.Thread(
             target=self.match_players_thread, args=(), daemon=True).start()
         while True:
-            conn = self.accept_new_player()
-            self.create_player_connection_threads(conn)
+            logger.info("Waiting for player's connections")
+            conn, conn_type = self.accept_new_player()
+            if conn_type == 'server':
+                self.create_backup_server_thread(conn)
+            else:
+                self.create_player_connection_threads(conn)
+
+    def connect_to_running_server(self, address, port):
+        try:
+            logger.info("Trying to connect and find active servers")
+            m_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ssl_socket = ssl.wrap_socket(
+                m_socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
+            ssl_socket.connect((address, int(port)))
+            logger.info("Connected to a running server")
+
+            return True, ssl_socket
+        except Exception:
+            logger.error('Could not connect to a running server')
+            return False, ''
+
+    def create_backup_server_thread(self, conn):
+        logger.info("Backup server is up")
+        try:
+            threading.Thread(
+                target=self.backup_server_echo_response_thread, args=(conn,), daemon=True).start()
+        except Exception as e:
+            logger.error(
+                "Couldn't create a thread, terminating backup server session,  " + str(e))
+            conn.close()
+
+    def backup_server_echo_response_thread(self, backup_server_conn):
+        while True:
+            msg = self.server_receive_echo(backup_server_conn, 'backup')
+            if msg != '':
+                send_sussess = self.server_send_echo(
+                    backup_server_conn, msg, 'backup')
+                if not send_sussess:
+                    break
+
+    def echo_running_server(self, running_server):
+        while True:
+            challenge = 'f'
+            self.server_send_echo(running_server, challenge, 'running')
+            response = self.server_receive_echo(running_server, 'running')
+            if response != challenge:
+                logger.error("Lost connection to running server")
+                break
+            time.sleep(ECHO_FREQUENCY)
+
+    def server_send_echo(self, conn, msg, server_type):
+        try:
+            conn.send((cmd['echo'] + msg).encode())
+            if DEBUG:
+                logger.info('sending echo ' + str(msg) + ' to backup server')
+            return True
+        except Exception as e:
+            logger.error("Send failed to " +
+                         str(server_type) + " server, " + str(e))
+            logger.error("Lost connection to " + str(server_type) + " server")
+
+    def server_receive_echo(self, conn, server_type):
+        try:
+            msg = conn.recv(message_length).decode()
+            if DEBUG:
+                logger.info('received: ' + str(msg) +
+                            ' from backup server')
+            return msg[1]
+        except Exception as e:
+            logger.error('Failed while receiving msg from ' +
+                         str(server_type) + ' server,  ' + str(e))
 
     def create_player_connection_threads(self, conn):
         try:
@@ -59,16 +144,23 @@ class GameServer(Server):
             conn.close()
 
     def accept_new_player(self):
+        conn_type = ''
         try:
             # accept connections with ssl socket wrap
             conn, addr = self.socket_ssl.accept()
+            # TODO remove run_once variable
+            if addr[0] == server2_address and not GameServer.run_once:
+                conn_type = 'server'
+                GameServer.run_once = True
+            else:
+                conn_type = 'client'
             logger.info('Connected to: ' +
                         str(addr[0]) + ':' + str(addr[1]))
+
         except Exception as e:
             logger.error(
                 "Couldn't create secure connection to player, " + str(e))
-            raise
-        return conn
+        return conn, conn_type
 
     def log_players_stats(self):
         logger.info('Waiting players: ' +
@@ -172,6 +264,7 @@ class GameServer(Server):
 
     def match_players_thread(self):
         """find an opponenet for the player"""
+        logger.info("Start players matching thread")
         while True:
             if len(self.players_waitlist) > 1:
                 player1, player2 = self.assign_roles()

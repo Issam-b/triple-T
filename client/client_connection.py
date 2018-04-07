@@ -5,8 +5,8 @@ import socket
 import time
 from helpers import setup_logger
 import client_game as cg
-import constants
-from constants import cmd
+import helpers as constants
+from helpers import cmd
 from helpers import game_config
 
 logger = setup_logger('settings.conf', 'client')
@@ -28,21 +28,33 @@ class ClientConnection():
 
     def client_connect(self):
         """connect to server function"""
+        fail_counter = 0
         while True:
             try:
-                address = game_config.get('connection', 'address')
-                port = game_config.get('connection', 'port')
-                logger.info("Trying to connect to server...")
-                # use connection with ssl wrapped socket
+                if fail_counter == 0:
+                    address = game_config.get('connection', 'address')
+                    port = game_config.get('connection', 'port')
+                if fail_counter == 1:
+                    address = game_config.get('connection', 'address2')
+                    port = game_config.get('connection', 'port2')
+                if fail_counter > 1:
+                    logger.info("All servers are down")
+                    exit(-1)
+
+                logger.info("Trying to connect to server " +
+                            str(fail_counter + 1) + " on " + str(address) + ":" + str(port))
+
                 self.client_socket = ssl.wrap_socket(
                     self.socket, cert_reqs=ssl.CERT_REQUIRED, ca_certs=CERT)
                 self.client_socket.connect((address, int(port)))
                 logger.info("Connected to Server")
                 break
-            except Exception as e:
-                logger.error('Error connecting, exception message: ' + str(e))
+            except Exception:
+                logger.error('Error connecting to ' +
+                             str(address) + ":" + str(port))
             finally:
                 time.sleep(1)
+            fail_counter += 1
 
     def receive_populate_buffer(self, size=message_length):
         """receive commands and save to buffer untill read by server"""
@@ -62,6 +74,7 @@ class ClientConnection():
 
         except Exception as es:
             logger.error('Got exception while receiving msg: ' + str(es))
+            self.connection_lost()
 
     def find_cmd_buffer_key(self, cmd, msg, recv_cmd):
         items = cmd.items()
@@ -100,6 +113,7 @@ class ClientConnection():
     def connection_lost(self):
         """called when connection is lost"""
         logger.error('Connection lost!')
+        cg.Game.game_ended = True
         exit(-1)
 
     def close(self):

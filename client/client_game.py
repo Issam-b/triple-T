@@ -4,7 +4,7 @@ import time
 import threading
 import _thread
 from helpers import setup_logger
-from constants import cmd
+from helpers import cmd
 import signal
 from helpers import game_config
 from pynput.keyboard import Key, Controller

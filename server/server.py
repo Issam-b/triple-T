@@ -5,7 +5,7 @@ import ssl
 from helpers import setup_logger
 from helpers import game_config
 
-logger = setup_logger('settings.conf', 'client')
+logger = setup_logger('settings.conf', 'server')
 KEY = game_config.get('SSL', 'KEY')
 CERT = game_config.get('SSL', 'CERT')
 

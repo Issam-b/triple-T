@@ -3,12 +3,13 @@
 import random
 import string
 import time
+import helpers as constants
 from helpers import setup_logger
-import server_game as sg
-import constants
-from constants import cmd
-from constants import cmd_buffer
+from helpers import cmd
+from helpers import cmd_buffer
 from helpers import game_config
+import server_game as sg
+
 
 # command codenames between sever and client
 message_length = int(game_config.get('OTHER', 'message_length'))

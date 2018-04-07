@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 
 from configparser import ConfigParser
-from constants import cmd
+from helpers import cmd
 from helpers import setup_logger
 from helpers import game_config
 from server_game import GameServer
