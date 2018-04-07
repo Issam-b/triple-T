@@ -8,12 +8,14 @@ from constants import cmd
 import signal
 from helpers import game_config
 from pynput.keyboard import Key, Controller
+import pyautogui
 
 logger = setup_logger('settings.conf', 'client')
 TIMEOUT = int(game_config.get('OTHER', 'TIMEOUT'))
 connection_threads_sleep = float(
     game_config.get('OTHER', 'connection_threads_sleep'))
 keyboard = Controller()
+echo_enable = game_config.get('OTHER', 'echo')
 
 
 class Game():
@@ -64,7 +66,8 @@ class Game():
         logger.info('Running check states thread')
         while True:
             try:
-                self.reply_echo()
+                if echo_enable == '1':
+                    self.reply_echo()
                 self.check_turn_timeout()
                 if self.opponent_disconnected_check():
                     break
@@ -132,6 +135,9 @@ class Game():
             board_content = self.connection.client_receive_with_wait('board')
             state = self.connection.client_receive_with_wait('state')
 
+            if Game.game_ended:
+                break
+
             if state == cmd['state_types']['your_turn']:
                 self.print_board(board_content, 'input')
                 self.get_player_move(board_content)
@@ -151,8 +157,6 @@ class Game():
                 elif state == cmd['state_types']['lose']:
                     logger.info("You lose.")
                     break
-            if Game.game_ended:
-                break
 
     def print_board(self, board_content, board_type):
         if board_type == 'input':
@@ -205,8 +209,8 @@ class Game():
         exit()
 
     def press_enter_interrupt(self, signum, frame):
-        logger.info("interrupted")
-        keyboard.release(Key.enter)
+        logger.info("Press enter to continue")
+        # pyautogui.press('enter')
 
     def input(self, message):
         try:

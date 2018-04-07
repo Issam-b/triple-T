@@ -40,7 +40,7 @@ class Player:
                 logger.info('sending: ' + str(command + msg) +
                             ' to: ' + str(self.id))
         except Exception as e:
-            logger.error("Send exception: " + str(e))
+            logger.error("Send failed to " + str(self.id) + " : " + str(e))
             # assume player connection is lost if an error accured
             self.lost_connection()
 
@@ -66,7 +66,8 @@ class Player:
             return True
 
         except Exception as e:
-            logger.error('Got exception while receiving msg: ' + str(e))
+            logger.error('Failed while receiving msg from ' +
+                         str(self.id) + ' : ' + str(e))
             return False
 
     def find_cmd_buffer_key(self, cmd, msg, recv_cmd):
@@ -118,13 +119,12 @@ class Player:
                 self.remove_player_from_server('waitlist')
                 success_state = True
         except Exception as e:
-            logger.error(
-                'Expected a valid confirm integer, exception message: ' + str(e))
+            logger.error('Expected a valid confirm integer, ' + str(e))
 
         return success_state
 
     def remove_player_from_server(self, waitlist='', active=''):
-        if waitlist == 'watilist' and self in sg.GameServer.players_waitlist:
+        if waitlist == 'waitlist' and self in sg.GameServer.players_waitlist:
             sg.GameServer.players_waitlist.remove(self)
         if active == 'active' and self in sg.GameServer.active_players:
             sg.GameServer.active_players.remove(self)

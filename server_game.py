@@ -12,6 +12,7 @@ from helpers import game_config
 logger = setup_logger('settings.conf', 'server')
 ECHO_FREQUENCY = int(game_config.get('OTHER', 'ECHO_FREQUENCY'))
 TIMEOUT = int(game_config.get('OTHER', 'TIMEOUT'))
+echo_enable = game_config.get('OTHER', 'echo')
 
 
 class GameServer(Server):
@@ -88,11 +89,11 @@ class GameServer(Server):
             opponent = self.get_opponent(player)
             if opponent is not None:
                 opponent.disconected = True
-                opponent.send(
-                    cmd['state'], cmd['state_types']['other_disconnected'])
+                # self.announce_player_disconnected([opponent, ])
 
             self.remove_player('waitlist', player)
             self.remove_player('active', player)
+            self.announce_player_disconnected([player, ])
 
         player.conn.close()
 
@@ -108,8 +109,7 @@ class GameServer(Server):
                 GameServer.active_players.remove(player1)
             if player2 in GameServer.active_players:
                 GameServer.active_players.remove(player2)
-        player1.send(cmd['state'], cmd['state_types']['other_disconnected'])
-        player2.send(cmd['state'], cmd['state_types']['other_disconnected'])
+        # self.announce_player_disconnected([player1, player2])
 
     def remove_player(self, list, player):
         """remove a player from the servers lists"""
@@ -120,7 +120,6 @@ class GameServer(Server):
             player
             if player in GameServer.active_players:
                 GameServer.active_players.remove(player)
-        player.send(cmd['state'], cmd['state_types']['other_disconnected'])
 
     def player_receive_thread(self, player):
         """create a thread for the player and check his connection periodically"""
@@ -135,9 +134,12 @@ class GameServer(Server):
                 errors_counter += 1
                 time.sleep(1)
             if errors_counter == 2:
-                player.send(
-                    cmd['state'], cmd['state_types']['other_disconnected'])
+                # self.announce_player_disconnected([player, ])
                 self.drop_player(player)
+
+    def announce_player_disconnected(self, player_list):
+        for player in player_list:
+            player.send(cmd['state'], cmd['state_types']['other_disconnected'])
 
     def player_check_connection_thread(self, player):
         """create a thread for the player and check his connection periodically"""
@@ -145,8 +147,11 @@ class GameServer(Server):
             'Running connection check thread on player: ' + str(player.id))
         counter = 0
         while True:
-            if counter % ECHO_FREQUENCY == 0:
-                echo_value, challenge = self.check_echo_response(player)
+            if echo_enable == '1':
+                if counter % ECHO_FREQUENCY == 0:
+                    echo_value, challenge = self.check_echo_response(player)
+            else:
+                echo_value, challenge = ('f', 'f')
 
             quit_cmd = player.read_buffer('quit')
             if quit_cmd or player.disconected or echo_value != challenge:
@@ -181,7 +186,7 @@ class GameServer(Server):
                         player2.is_waiting = False
                     except Exception as e:
                         logger.error(
-                            'could not create game thread, exception message: ' + str(e))
+                            'could not create game thread, ' + str(e))
                 else:
                     self.create_game_fail_remove_players(
                         player1_send, player2_send, player1, player2)
@@ -211,12 +216,10 @@ class GameServer(Server):
         else:
             if player1_send is True:
                 self.remove_player('waitlist', player2)
-                player1.send(
-                    cmd['state'], cmd['state_types']['other_disconnected'])
+                self.announce_player_disconnected([player1, ])
             if player2_send is True:
                 self.remove_player('waitlist', player1)
-                player2.send(
-                    cmd['state'], cmd['state_types']['other_disconnected'])
+                self.announce_player_disconnected([player2, ])
 
     def get_opponent(self, player):
         """return opponnet player object of a player"""
@@ -240,10 +243,7 @@ class GameServer(Server):
             new_game.start()
         except Exception:
             logger.error('Game ended unexpectedly')
-            player1.send(
-                cmd['state'], cmd['state_types']['other_disconnected'])
-            player2.send(
-                cmd['state'], cmd['state_types']['other_disconnected'])
+            self.announce_player_disconnected([player1, player2])
 
 
 class Game:
