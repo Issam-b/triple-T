@@ -37,7 +37,7 @@ cmd_buffer = {
 }
 
 game_config = ConfigParser()
-game_config.read('settings.conf')
+game_config.read("settings.conf")
 
 
 def setup_logger(config_file, name):
